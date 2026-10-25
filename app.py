@@ -1,64 +1,83 @@
+
 import streamlit as st
 from transformers import pipeline
-import torch
+
 
 st.set_page_config(
-    page_title="AI Text Summarizer",
+    page_title="AI Text Summarization",
     page_icon="📝",
-    layout="wide"
+    layout="centered"
 )
 
-st.title("🤖 AI Text Summarizer")
-st.write("Summarize long articles and paragraphs using Hugging Face Transformers.")
+
+st.title("AI Text Summarization")
+st.write(
+    "Summarize long paragraphs and articles into short, "
+    "meaningful summaries using an AI language model."
+)
+
+st.divider()
+
 
 @st.cache_resource
-def load_summarizer():
-    model_name = "sshleifer/distilbart-cnn-12-6"
-    device = 0 if torch.cuda.is_available() else -1
-
+def load_model():
     return pipeline(
         "summarization",
-        model=model_name,
-        device=device
+        model="sshleifer/distilbart-cnn-12-6"
     )
 
-with st.sidebar:
-    st.header("About the Project")
-    st.write("This application uses a pre-trained Hugging Face model.")
-    st.write("Task: Text Summarization")
-    st.write("Model: DistilBART CNN")
-    st.write("Framework: Transformers Pipeline")
 
-    st.subheader("Summary Settings")
-    min_length = st.slider("Minimum summary length", 10, 60, 20)
-    max_length = st.slider("Maximum summary length", 30, 150, 60)
-
-st.subheader("Enter Your Text")
-
-input_text = st.text_area(
-    "Paste your article or paragraph here:",
+text = st.text_area(
+    "Enter your text here:",
     height=250,
-    placeholder="Enter a long article or paragraph to summarize..."
+    placeholder="Paste a long paragraph or article here..."
 )
 
-if input_text.strip():
-    word_count = len(input_text.split())
-    st.caption(f"Input word count: {word_count}")
 
-if st.button("✨ Generate Summary", type="primary"):
-    if not input_text.strip():
-        st.warning("Please enter some text before generating a summary.")
-    elif len(input_text.split()) < 20:
-        st.warning("Please enter a longer text with at least 20 words.")
-    elif min_length >= max_length:
-        st.error("Maximum summary length must be greater than minimum length.")
+summary_length = st.selectbox(
+    "Choose summary length:",
+    ["Short", "Medium", "Long"]
+)
+
+length_settings = {
+    "Short": {"max_length": 40, "min_length": 10},
+    "Medium": {"max_length": 80, "min_length": 20},
+    "Long": {"max_length": 130, "min_length": 40}
+}
+
+
+if st.button("Generate Summary", type="primary"):
+
+    if not text.strip():
+        st.warning("Please enter some text first.")
+
+    elif len(text.split()) < 40:
+        st.warning(
+            "Please enter a longer paragraph with at least "
+            "40 words for better summarization."
+        )
+
     else:
         try:
-            with st.spinner("Loading AI model and generating summary..."):
-                summarizer = load_summarizer()
+            with st.spinner("AI is generating your summary..."):
+                summarizer = load_model()
+
+                settings = length_settings[summary_length]
+
+                word_count = len(text.split())
+
+                max_length = min(
+                    settings["max_length"],
+                    max(20, word_count // 2)
+                )
+
+                min_length = min(
+                    settings["min_length"],
+                    max_length - 1
+                )
 
                 result = summarizer(
-                    input_text,
+                    text,
                     max_length=max_length,
                     min_length=min_length,
                     do_sample=False,
@@ -69,32 +88,34 @@ if st.button("✨ Generate Summary", type="primary"):
 
             st.success("Summary generated successfully!")
 
-            st.subheader("📄 Generated Summary")
+            st.subheader("Generated Summary")
             st.write(summary)
 
-            original_words = len(input_text.split())
-            summary_words = len(summary.split())
+            st.divider()
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
 
-            col1.metric("Original Words", original_words)
-            col2.metric("Summary Words", summary_words)
+            with col1:
+                st.metric("Original Words", len(text.split()))
 
-            if original_words > 0:
-                reduction = (1 - summary_words / original_words) * 100
-                col3.metric("Text Reduction", f"{reduction:.1f}%")
+            with col2:
+                st.metric("Summary Words", len(summary.split()))
 
             st.download_button(
-                label="⬇️ Download Summary",
+                label="Download Summary",
                 data=summary,
                 file_name="summary.txt",
                 mime="text/plain"
             )
 
-        except Exception as error:
-            st.error("Unable to generate the summary.")
-            st.write("Please check your internet connection and try again.")
-            st.caption(f"Error details: {error}")
+        except Exception as e:
+            st.error(
+                "Unable to generate the summary. "
+                "Please check your internet connection and try again."
+            )
+            st.caption(f"Technical details: {e}")
 
 st.divider()
-st.caption("Built using Python, Streamlit, and Hugging Face Transformers.")
+
+st.caption("Powered by Streamlit and a pretrained Transformer model.")
+
