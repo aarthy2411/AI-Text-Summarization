@@ -1,258 +1,100 @@
 import streamlit as st
 from transformers import pipeline
+import torch
 
 st.set_page_config(
-    page_title="AI Text Summarization",
+    page_title="AI Text Summarizer",
     page_icon="📝",
     layout="wide"
 )
 
-
-
-st.title("AI Text Summarization")
-
-st.write(
-    "Summarize text, translate languages, "
-    "analyze sentiment, and answer questions using AI."
-)
-
-
+st.title("🤖 AI Text Summarizer")
+st.write("Summarize long articles and paragraphs using Hugging Face Transformers.")
 
 @st.cache_resource
 def load_summarizer():
+    model_name = "sshleifer/distilbart-cnn-12-6"
+    device = 0 if torch.cuda.is_available() else -1
+
     return pipeline(
         "summarization",
-        model="sshleifer/distilbart-cnn-12-6"
+        model=model_name,
+        device=device
     )
 
+with st.sidebar:
+    st.header("About the Project")
+    st.write("This application uses a pre-trained Hugging Face model.")
+    st.write("Task: Text Summarization")
+    st.write("Model: DistilBART CNN")
+    st.write("Framework: Transformers Pipeline")
 
-@st.cache_resource
-def load_translator():
-    return pipeline(
-        "translation",
-        model="Helsinki-NLP/opus-mt-en-fr"
-    )
+    st.subheader("Summary Settings")
+    min_length = st.slider("Minimum summary length", 10, 60, 20)
+    max_length = st.slider("Maximum summary length", 30, 150, 60)
 
+st.subheader("Enter Your Text")
 
-@st.cache_resource
-def load_sentiment_analyzer():
-    return pipeline(
-        "sentiment-analysis"
-    )
-
-
-@st.cache_resource
-def load_question_answerer():
-    return pipeline(
-        "question-answering",
-        model="distilbert/distilbert-base-cased-distilled-squad"
-    )
-
-
-
-st.sidebar.header("Choose a Task")
-
-task = st.sidebar.selectbox(
-    "Select an NLP task",
-    [
-        "Text Summarization",
-        "Translation",
-        "Sentiment Analysis",
-        "Question Answering"
-    ]
+input_text = st.text_area(
+    "Paste your article or paragraph here:",
+    height=250,
+    placeholder="Enter a long article or paragraph to summarize..."
 )
 
+if input_text.strip():
+    word_count = len(input_text.split())
+    st.caption(f"Input word count: {word_count}")
 
+if st.button("✨ Generate Summary", type="primary"):
+    if not input_text.strip():
+        st.warning("Please enter some text before generating a summary.")
+    elif len(input_text.split()) < 20:
+        st.warning("Please enter a longer text with at least 20 words.")
+    elif min_length >= max_length:
+        st.error("Maximum summary length must be greater than minimum length.")
+    else:
+        try:
+            with st.spinner("Loading AI model and generating summary..."):
+                summarizer = load_summarizer()
 
-if task == "Text Summarization":
-
-    st.header("Text Summarization")
-
-    text = st.text_area(
-        "Enter your text:",
-        height=220,
-        placeholder="Paste a long paragraph or article here..."
-    )
-
-    if st.button("Summarize Text"):
-
-        if not text.strip():
-            st.warning("Please enter some text.")
-
-        elif len(text.split()) < 20:
-            st.warning(
-                "Please enter a longer paragraph for summarization."
-            )
-
-        else:
-            try:
-                with st.spinner("Generating summary..."):
-
-                    summarizer = load_summarizer()
-
-                    result = summarizer(
-                        text,
-                        max_length=100,
-                        min_length=20,
-                        do_sample=False,
-                        truncation=True
-                    )
+                result = summarizer(
+                    input_text,
+                    max_length=max_length,
+                    min_length=min_length,
+                    do_sample=False,
+                    truncation=True
+                )
 
                 summary = result[0]["summary_text"]
 
-                st.subheader("Generated Summary")
-                st.success(summary)
+            st.success("Summary generated successfully!")
 
-                original_words = len(text.split())
-                summary_words = len(summary.split())
+            st.subheader("📄 Generated Summary")
+            st.write(summary)
 
-                col1, col2 = st.columns(2)
+            original_words = len(input_text.split())
+            summary_words = len(summary.split())
 
-                col1.metric(
-                    "Original Word Count",
-                    original_words
-                )
+            col1, col2, col3 = st.columns(3)
 
-                col2.metric(
-                    "Summary Word Count",
-                    summary_words
-                )
+            col1.metric("Original Words", original_words)
+            col2.metric("Summary Words", summary_words)
 
-            except Exception as e:
-                st.error(f"Summarization failed: {e}")
+            if original_words > 0:
+                reduction = (1 - summary_words / original_words) * 100
+                col3.metric("Text Reduction", f"{reduction:.1f}%")
 
-
-
-elif task == "Translation":
-
-    st.header("English to French Translation")
-
-    text = st.text_area(
-        "Enter English text:",
-        height=180,
-        placeholder="Enter the text you want to translate..."
-    )
-
-    if st.button("Translate Text"):
-
-        if not text.strip():
-            st.warning("Please enter some text.")
-
-        else:
-            try:
-                with st.spinner("Translating text..."):
-
-                    translator = load_translator()
-
-                    result = translator(
-                        text,
-                        max_length=200,
-                        truncation=True
-                    )
-
-                st.subheader("Translated Text")
-
-                st.success(
-                    result[0]["translation_text"]
-                )
-
-            except Exception as e:
-                st.error(f"Translation failed: {e}")
-
-
-
-elif task == "Sentiment Analysis":
-
-    st.header("Sentiment Analysis")
-
-    text = st.text_area(
-        "Enter a sentence or review:",
-        height=150,
-        placeholder="Example: This product is amazing!"
-    )
-
-    if st.button("Analyze Sentiment"):
-
-        if not text.strip():
-            st.warning("Please enter some text.")
-
-        else:
-            try:
-                with st.spinner("Analyzing sentiment..."):
-
-                    analyzer = load_sentiment_analyzer()
-
-                    result = analyzer(text[:2000])
-
-                label = result[0]["label"]
-                score = result[0]["score"]
-
-                st.subheader("Analysis Result")
-
-                st.write(f"Sentiment: {label}")
-                st.write(f"Confidence: {score:.2%}")
-
-                if label == "POSITIVE":
-                    st.success("The text expresses positive sentiment.")
-
-                elif label == "NEGATIVE":
-                    st.error("The text expresses negative sentiment.")
-
-                else:
-                    st.info(f"Predicted sentiment: {label}")
-
-            except Exception as e:
-                st.error(f"Sentiment analysis failed: {e}")
-
-
-
-elif task == "Question Answering":
-
-    st.header("Question Answering")
-
-    context = st.text_area(
-        "Enter the passage or context:",
-        height=220,
-        placeholder="Paste a passage containing the answer..."
-    )
-
-    question = st.text_input(
-        "Enter your question:",
-        placeholder="Ask a question about the passage..."
-    )
-
-    if st.button("Get Answer"):
-
-        if not context.strip() or not question.strip():
-            st.warning(
-                "Please enter both the passage and the question."
+            st.download_button(
+                label="⬇️ Download Summary",
+                data=summary,
+                file_name="summary.txt",
+                mime="text/plain"
             )
 
-        else:
-            try:
-                with st.spinner("Finding the answer..."):
+        except Exception as error:
+            st.error("Unable to generate the summary.")
+            st.write("Please check your internet connection and try again.")
+            st.caption(f"Error details: {error}")
 
-                    qa = load_question_answerer()
-
-                    result = qa(
-                        question=question,
-                        context=context
-                    )
-
-                st.subheader("Answer")
-
-                st.success(result["answer"])
-
-                st.caption(
-                    f"Model confidence: {result['score']:.2%}"
-                )
-
-            except Exception as e:
-                st.error(f"Question answering failed: {e}")
-
-
-
-st.sidebar.markdown("---")
-st.sidebar.caption(
-    "Built using Python, Streamlit and Hugging Face"
-)
+st.divider()
+st.caption("Built using Python, Streamlit, and Hugging Face Transformers.")
