@@ -1,121 +1,66 @@
-
 import streamlit as st
 from transformers import pipeline
 
-
 st.set_page_config(
-    page_title="AI Text Summarization",
-    page_icon="📝",
-    layout="centered"
+    page_title="Hugging Face NLP Toolkit",
+    page_icon="🤗"
 )
 
+st.title("🤗 Hugging Face NLP Toolkit")
 
-st.title("AI Text Summarization")
-st.write(
-    "Summarize long paragraphs and articles into short, "
-    "meaningful summaries using an AI language model."
-)
-
-st.divider()
-
+st.write("Perform NLP tasks using Hugging Face Pipelines.")
 
 @st.cache_resource
 def load_model():
     return pipeline(
-        "summarization",
-        model="sshleifer/distilbart-cnn-12-6"
+        "sentiment-analysis",
+        model="distilbert/distilbert-base-uncased-finetuned-sst-2-english"
     )
 
-
-text = st.text_area(
-    "Enter your text here:",
-    height=250,
-    placeholder="Paste a long paragraph or article here..."
+task = st.sidebar.selectbox(
+    "Choose a Task",
+    [
+        "Sentiment Analysis",
+        "Text Summarization",
+        "Translation",
+        "Question Answering"
+    ]
 )
 
+if task == "Sentiment Analysis":
 
-summary_length = st.selectbox(
-    "Choose summary length:",
-    ["Short", "Medium", "Long"]
-)
+    st.header("😊 Sentiment Analysis")
 
-length_settings = {
-    "Short": {"max_length": 40, "min_length": 10},
-    "Medium": {"max_length": 80, "min_length": 20},
-    "Long": {"max_length": 130, "min_length": 40}
-}
+    text = st.text_area(
+        "Enter your text",
+        placeholder="Example: I love this application!"
+    )
 
+    if st.button("Analyze Sentiment"):
 
-if st.button("Generate Summary", type="primary"):
+        if text.strip():
 
-    if not text.strip():
-        st.warning("Please enter some text first.")
+            try:
+                with st.spinner("Analyzing..."):
+                    model = load_model()
+                    result = model(text[:4000])[0]
 
-    elif len(text.split()) < 40:
-        st.warning(
-            "Please enter a longer paragraph with at least "
-            "40 words for better summarization."
-        )
-
-    else:
-        try:
-            with st.spinner("AI is generating your summary..."):
-                summarizer = load_model()
-
-                settings = length_settings[summary_length]
-
-                word_count = len(text.split())
-
-                max_length = min(
-                    settings["max_length"],
-                    max(20, word_count // 2)
+                st.success(f"Sentiment: {result['label']}")
+                st.write(
+                    f"Confidence: {result['score'] * 100:.2f}%"
                 )
 
-                min_length = min(
-                    settings["min_length"],
-                    max_length - 1
-                )
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-                result = summarizer(
-                    text,
-                    max_length=max_length,
-                    min_length=min_length,
-                    do_sample=False,
-                    truncation=True
-                )
+        else:
+            st.warning("Please enter some text.")
 
-                summary = result[0]["summary_text"]
+elif task == "Text Summarization":
+    st.info("Text Summarization will be added next.")
 
-            st.success("Summary generated successfully!")
+elif task == "Translation":
+    st.info("Translation will be added next.")
 
-            st.subheader("Generated Summary")
-            st.write(summary)
-
-            st.divider()
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.metric("Original Words", len(text.split()))
-
-            with col2:
-                st.metric("Summary Words", len(summary.split()))
-
-            st.download_button(
-                label="Download Summary",
-                data=summary,
-                file_name="summary.txt",
-                mime="text/plain"
-            )
-
-        except Exception as e:
-            st.error(
-                "Unable to generate the summary. "
-                "Please check your internet connection and try again."
-            )
-            st.caption(f"Technical details: {e}")
-
-st.divider()
-
-st.caption("Powered by Streamlit and a pretrained Transformer model.")
-
+elif task == "Question Answering":
+    st.info("Question Answering will be added next.")
