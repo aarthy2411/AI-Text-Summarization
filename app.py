@@ -1,200 +1,145 @@
+
 import streamlit as st
 from transformers import pipeline
 
-# Page Configuration
+
 st.set_page_config(
-    page_title="AR AI Sumatization",
-    page_icon="🤖",
-    layout="wide"
+    page_title="AI Text Summarization",
+    page_icon="📝",
+    layout="centered"
 )
 
-# App Title
-st.sidebar.title("AR AI Sumatization")
-st.sidebar.write("Choose your AI tool")
 
-task = st.sidebar.selectbox(
-    "Select a task",
-    [
-        "Text Summarization",
-        "Translation",
-        "Sentiment Analysis",
-        "Question Answering"
-    ]
+st.title("AI Text Summarization")
+st.write(
+    "Enter a long paragraph and generate a short, meaningful summary using AI."
 )
 
-# Load models only when required
+
 @st.cache_resource
 def load_summarizer():
     return pipeline(
         "text2text-generation",
-        model="google/flan-t5-base"
-    )
-
-@st.cache_resource
-def load_translator():
-    return pipeline(
-        "translation_en_to_fr",
-        model="Helsinki-NLP/opus-mt-en-fr"
-    )
-
-@st.cache_resource
-def load_sentiment():
-    return pipeline(
-        "sentiment-analysis",
-        model="distilbert/distilbert-base-uncased-finetuned-sst-2-english"
-    )
-
-@st.cache_resource
-def load_qa():
-    return pipeline(
-        "question-answering",
-        model="distilbert/distilbert-base-cased-distilled-squad"
+        model="google/flan-t5-small"
     )
 
 
-# 1. Text Summarization
-if task == "Text Summarization":
+text = st.text_area(
+    "Enter your text here:",
+    height=250,
+    placeholder="Paste your paragraph or article here..."
+)
 
-    st.title("AR AI Sumatization")
-    st.write("Enter your paragraph")
 
-    text = st.text_area(
-        "Paragraph",
-        height=200,
-        placeholder="Enter the paragraph you want to summarize..."
-    )
+summary_length = st.selectbox(
+    "Choose summary length:",
+    ["Short", "Medium", "Long"]
+)
 
-    if st.button("Summarize Text", use_container_width=True):
 
-        if text.strip():
+length_settings = {
+    "Short": {"max_new_tokens": 50},
+    "Medium": {"max_new_tokens": 100},
+    "Long": {"max_new_tokens": 150}
+}
 
-            try:
-                with st.spinner("Generating summary..."):
-                    summarizer = load_summarizer()
+# Summarize button
+if st.button("Generate Summary", type="primary"):
+
+    if not text.strip():
+        st.warning("Please enter some text first.")
+
+    elif len(text.split()) < 20:
+        st.warning(
+            "Please enter at least 20 words for a meaningful summary."
+        )
+
+    else:
+        try:
+            with st.spinner(
+                "Loading AI model and generating your summary..."
+            ):
+                summarizer = load_summarizer()
+
+                # Split long input into manageable chunks
+                words = text.split()
+                chunk_size = 350
+                chunks = [
+                    " ".join(words[i:i + chunk_size])
+                    for i in range(0, len(words), chunk_size)
+                ]
+
+                summaries = []
+
+                for chunk in chunks:
+                    prompt = (
+                        "Summarize the following text clearly. "
+                        "Keep the important information:\n" + chunk
+                    )
 
                     result = summarizer(
-                        "Summarize this text: " + text,
-                        max_new_tokens=100,
-                        do_sample=False
+                        prompt,
+                        max_new_tokens=length_settings[
+                            summary_length
+                        ]["max_new_tokens"],
+                        do_sample=False,
+                        truncation=True
                     )
 
-                st.subheader("Summary")
-                st.success(result[0]["generated_text"])
+                    summary = result[0]["generated_text"].strip()
 
-            except Exception as e:
-                st.error(f"Summarization error: {e}")
+                    if summary:
+                        summaries.append(summary)
 
-        else:
-            st.warning("Please enter some text.")
+                # Combine generated summaries
+                if summaries:
+                    final_text = " ".join(summaries)
 
+                    # Summarize again if multiple chunks were used
+                    if len(summaries) > 1:
+                        result = summarizer(
+                            "Summarize this text into one clear "
+                            "summary, keeping the key information:\n"
+                            + final_text,
+                            max_new_tokens=length_settings[
+                                summary_length
+                            ]["max_new_tokens"],
+                            do_sample=False,
+                            truncation=True
+                        )
 
-# 2. Translation
-elif task == "Translation":
+                        final_text = result[0][
+                            "generated_text"
+                        ].strip()
 
-    st.title("English to French Translation")
-    st.write("Enter English text to translate into French.")
+                    st.success("Summary generated successfully!")
 
-    text = st.text_area(
-        "English Text",
-        height=150
-    )
+                    st.subheader("Generated Summary")
+                    st.write(final_text)
 
-    if st.button("Translate Text", use_container_width=True):
-
-        if text.strip():
-
-            try:
-                with st.spinner("Translating..."):
-                    translator = load_translator()
-                    result = translator(text, max_length=200)
-
-                st.subheader("French Translation")
-                st.success(result[0]["translation_text"])
-
-            except Exception as e:
-                st.error(f"Translation error: {e}")
-
-        else:
-            st.warning("Please enter some text.")
-
-
-# 3. Sentiment Analysis
-elif task == "Sentiment Analysis":
-
-    st.title("Sentiment Analysis")
-    st.write("Find out whether a sentence is positive or negative.")
-
-    text = st.text_area(
-        "Enter your sentence",
-        height=150
-    )
-
-    if st.button("Analyze Sentiment", use_container_width=True):
-
-        if text.strip():
-
-            try:
-                with st.spinner("Analyzing sentiment..."):
-                    sentiment_model = load_sentiment()
-                    result = sentiment_model(text)
-
-                label = result[0]["label"]
-                score = result[0]["score"]
-
-                st.subheader("Analysis Result")
-                st.write(f"**Sentiment:** {label}")
-                st.write(f"**Confidence:** {score:.2%}")
-
-            except Exception as e:
-                st.error(f"Sentiment analysis error: {e}")
-
-        else:
-            st.warning("Please enter a sentence.")
-
-
-# 4. Question Answering
-elif task == "Question Answering":
-
-    st.title("Question Answering")
-    st.write("Enter a paragraph and ask a question about it.")
-
-    context = st.text_area(
-        "Context / Paragraph",
-        height=200,
-        placeholder="Enter the paragraph here..."
-    )
-
-    question = st.text_input(
-        "Your Question",
-        placeholder="Enter your question..."
-    )
-
-    if st.button("Get Answer", use_container_width=True):
-
-        if context.strip() and question.strip():
-
-            try:
-                with st.spinner("Finding the answer..."):
-                    qa_model = load_qa()
-
-                    result = qa_model(
-                        question=question,
-                        context=context
+                    st.download_button(
+                        label="Download Summary",
+                        data=final_text,
+                        file_name="summary.txt",
+                        mime="text/plain"
                     )
 
-                st.subheader("Answer")
-                st.success(result["answer"])
+                    st.caption(
+                        f"Original words: {len(words)} | "
+                        f"Summary words: {len(final_text.split())}"
+                    )
 
-            except Exception as e:
-                st.error(f"Question answering error: {e}")
+                else:
+                    st.error(
+                        "The model returned an empty summary. "
+                        "Please try different input text."
+                    )
 
-        else:
-            st.warning(
-                "Please enter both the paragraph and the question."
-            )
+        except Exception as e:
+            st.error("Unable to generate the summary.")
+            st.write("Error details:", str(e))
 
 
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.caption("Powered by Hugging Face Transformers")
-st.sidebar.caption("Created with Streamlit")
+st.divider()
+st.caption("AI Text Summarization | Built with Python and Streamlit")
+
