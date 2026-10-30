@@ -1,6 +1,6 @@
-
 import streamlit as st
-from transformers import pipeline
+import re
+from collections import Counter
 
 
 st.set_page_config(
@@ -11,135 +11,186 @@ st.set_page_config(
 
 
 st.title("AI Text Summarization")
+
 st.write(
-    "Enter a long paragraph and generate a short, meaningful summary using AI."
+    "Convert long paragraphs and articles into "
+    "short, meaningful summaries using NLP."
 )
 
+st.divider()
 
-@st.cache_resource
-def load_summarizer():
-    return pipeline(
-        "text2text-generation",
-        model="google/flan-t5-small"
+
+
+STOPWORDS = {
+    "the", "is", "are", "was", "were", "a", "an",
+    "and", "or", "but", "in", "on", "at", "to",
+    "of", "for", "with", "by", "from", "as",
+    "this", "that", "these", "those", "it",
+    "its", "be", "been", "being", "has", "have",
+    "had", "do", "does", "did", "will", "would",
+    "can", "could", "should", "may", "might",
+    "we", "they", "he", "she", "you", "i",
+    "their", "them", "our", "your", "his", "her",
+    "which", "who", "what", "when", "where",
+    "how", "why", "if", "then", "than", "also",
+    "not", "no", "so", "such", "into", "about",
+    "through", "there", "here"
+}
+
+
+
+def summarize_text(text, summary_length):
+
+    
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+
+    sentences = [
+        sentence.strip()
+        for sentence in sentences
+        if len(sentence.split()) > 2
+    ]
+
+    if len(sentences) <= 1:
+        return text.strip()
+
+    
+    words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+
+    words = [
+        word for word in words
+        if word not in STOPWORDS and len(word) > 2
+    ]
+
+    word_frequency = Counter(words)
+
+    if not word_frequency:
+        return text.strip()
+
+    
+    sentence_scores = []
+
+    for index, sentence in enumerate(sentences):
+
+        sentence_words = re.findall(
+            r'\b[a-zA-Z]+\b',
+            sentence.lower()
+        )
+
+        score = sum(
+            word_frequency[word]
+            for word in sentence_words
+            if word in word_frequency
+        )
+
+        score = score / max(len(sentence_words), 1)
+
+        sentence_scores.append((index, score))
+
+    
+    length_settings = {
+        "Short": 2,
+        "Medium": 3,
+        "Long": 5
+    }
+
+    sentence_count = length_settings[summary_length]
+
+    sentence_count = min(sentence_count, len(sentences))
+
+    
+    ranked_sentences = sorted(
+        sentence_scores,
+        key=lambda item: item[1],
+        reverse=True
     )
 
+    selected_indices = {
+        index for index, score in ranked_sentences[:sentence_count]
+    }
+
+    
+    summary = [
+        sentence
+        for index, sentence in enumerate(sentences)
+        if index in selected_indices
+    ]
+
+    return " ".join(summary)
+
+
+
+st.subheader("Enter Your Text")
 
 text = st.text_area(
-    "Enter your text here:",
+    "Paste your paragraph or article below:",
     height=250,
-    placeholder="Paste your paragraph or article here..."
+    placeholder="Enter a long paragraph or article here..."
 )
 
 
 summary_length = st.selectbox(
-    "Choose summary length:",
+    "Choose Summary Length",
     ["Short", "Medium", "Long"]
 )
 
 
-length_settings = {
-    "Short": {"max_new_tokens": 50},
-    "Medium": {"max_new_tokens": 100},
-    "Long": {"max_new_tokens": 150}
-}
-
-# Summarize button
 if st.button("Generate Summary", type="primary"):
 
     if not text.strip():
+
         st.warning("Please enter some text first.")
 
-    elif len(text.split()) < 20:
+    elif len(text.split()) < 30:
+
         st.warning(
-            "Please enter at least 20 words for a meaningful summary."
+            "Please enter at least 30 words "
+            "for better summarization."
         )
 
     else:
-        try:
-            with st.spinner(
-                "Loading AI model and generating your summary..."
-            ):
-                summarizer = load_summarizer()
 
-                # Split long input into manageable chunks
-                words = text.split()
-                chunk_size = 350
-                chunks = [
-                    " ".join(words[i:i + chunk_size])
-                    for i in range(0, len(words), chunk_size)
-                ]
+        with st.spinner("Generating your summary..."):
 
-                summaries = []
+            summary = summarize_text(
+                text,
+                summary_length
+            )
 
-                for chunk in chunks:
-                    prompt = (
-                        "Summarize the following text clearly. "
-                        "Keep the important information:\n" + chunk
-                    )
+        if summary:
 
-                    result = summarizer(
-                        prompt,
-                        max_new_tokens=length_settings[
-                            summary_length
-                        ]["max_new_tokens"],
-                        do_sample=False,
-                        truncation=True
-                    )
+            st.success("Summary generated successfully!")
 
-                    summary = result[0]["generated_text"].strip()
+            st.subheader("Generated Summary")
 
-                    if summary:
-                        summaries.append(summary)
+            st.info(summary)
 
-                # Combine generated summaries
-                if summaries:
-                    final_text = " ".join(summaries)
+            st.divider()
 
-                    # Summarize again if multiple chunks were used
-                    if len(summaries) > 1:
-                        result = summarizer(
-                            "Summarize this text into one clear "
-                            "summary, keeping the key information:\n"
-                            + final_text,
-                            max_new_tokens=length_settings[
-                                summary_length
-                            ]["max_new_tokens"],
-                            do_sample=False,
-                            truncation=True
-                        )
+            
+            col1, col2 = st.columns(2)
 
-                        final_text = result[0][
-                            "generated_text"
-                        ].strip()
+            with col1:
+                st.metric(
+                    "Original Words",
+                    len(text.split())
+                )
 
-                    st.success("Summary generated successfully!")
+            with col2:
+                st.metric(
+                    "Summary Words",
+                    len(summary.split())
+                )
 
-                    st.subheader("Generated Summary")
-                    st.write(final_text)
-
-                    st.download_button(
-                        label="Download Summary",
-                        data=final_text,
-                        file_name="summary.txt",
-                        mime="text/plain"
-                    )
-
-                    st.caption(
-                        f"Original words: {len(words)} | "
-                        f"Summary words: {len(final_text.split())}"
-                    )
-
-                else:
-                    st.error(
-                        "The model returned an empty summary. "
-                        "Please try different input text."
-                    )
-
-        except Exception as e:
-            st.error("Unable to generate the summary.")
-            st.write("Error details:", str(e))
-
+            
+            st.download_button(
+                label="Download Summary",
+                data=summary,
+                file_name="summary.txt",
+                mime="text/plain"
+            )
 
 st.divider()
-st.caption("AI Text Summarization | Built with Python and Streamlit")
 
+st.caption(
+    "Developed using Python, NLP and Streamlit."
+)
