@@ -100,9 +100,3 @@ http://localhost:8501
 ## Author
 
 **Aarthy V**
-
-GitHub: [aarthy2411](https://github.com/aarthy2411)
-
-## License
-
-This project is developed for educational and learning purposes.
